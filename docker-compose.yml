@@ -1,0 +1,23 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: mintads-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: mintads
+      POSTGRES_USER: mintads
+      POSTGRES_PASSWORD: mintads_dev
+    ports:
+      - "5432:5432"
+    volumes:
+      - mintads_postgres_data:/var/lib/postgresql/data
+      - ./scripts/schema.sql:/docker-entrypoint-initdb.d/01_schema.sql
+      - ./scripts/seed.sql:/docker-entrypoint-initdb.d/02_seed.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U mintads -d mintads"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  mintads_postgres_data:

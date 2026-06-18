@@ -1,0 +1,38 @@
+# Environment
+.env
+.env.local
+
+# Dependencies
+node_modules/
+**/node_modules/
+
+# Build outputs
+dist/
+build/
+.vite/
+**/dist/
+**/build/
+
+# Data / media (large files — do not commit)
+data/runs/
+
+# Remotion bundle cache
+.remotion/
+
+# macOS
+.DS_Store
+**/.DS_Store
+
+# Logs
+*.log
+npm-debug.log*
+
+# TypeScript
+*.tsbuildinfo
+
+# Test coverage
+coverage/
+
+# Replit
+.replit
+replit.nix
