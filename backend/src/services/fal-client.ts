@@ -146,13 +146,40 @@ function buildReactionCreatorPrompt(
 }
 
 /**
- * b_roll | pov | experience_detail — cinematic, no person.
- *
- * image-to-video only accepts a single image_url (primaryIdx), but b_roll scenes
- * can have 1–2 photo_reference_indices. The second photo's keyword is added to the
- * prompt as additional visual context so the model understands the full scene intent.
+ * b_roll — reference-to-video with 1–2 venue photos.
+ * Each photo gets a proper @ImageN reference since all URLs are actually passed.
  */
-function buildCinematicPrompt(
+function buildBrollPrompt(
+  scene: SceneJson,
+  globalStyle: GlobalStyle,
+  facts: FactsJson,
+  imageUrls: string[],
+): string {
+  const lines: string[] = [];
+  for (let i = 0; i < imageUrls.length; i++) {
+    const idx = scene.photo_reference_indices[i];
+    const kw = facts.photos[idx]?.keyword ?? 'venue';
+    lines.push(`@Image${i + 1} shows: ${kw}.`);
+  }
+  lines.push('');
+  lines.push(`${globalStyle.aesthetic}.`);
+  lines.push(`Location: ${facts.city} — ${facts.title}.`);
+  lines.push('No person in frame. Cinematic footage only.');
+  lines.push(
+    'Do NOT embed any text, captions, subtitles, titles, or watermarks in the frame.',
+  );
+  lines.push(
+    'All scenes share the same visual theme and color grade to cut together seamlessly.',
+  );
+  lines.push('---');
+  lines.push(scene.visual_direction);
+  return lines.join('\n');
+}
+
+/**
+ * pov | experience_detail — image-to-video, single venue photo.
+ */
+function buildSingleShotPrompt(
   scene: SceneJson,
   globalStyle: GlobalStyle,
   facts: FactsJson,
@@ -161,17 +188,6 @@ function buildCinematicPrompt(
   const kw = facts.photos[primaryIdx]?.keyword ?? 'venue';
   const lines: string[] = [];
   lines.push(`@Image1 shows: ${kw}.`);
-
-  // Mention any additional photo keywords (image-to-video API only accepts one URL,
-  // but the second photo's description enriches the model's visual understanding)
-  const additionalKeywords = scene.photo_reference_indices
-    .slice(1)
-    .map((idx) => facts.photos[idx]?.keyword)
-    .filter((k): k is string => Boolean(k));
-  if (additionalKeywords.length > 0) {
-    lines.push(`Additional visual context: ${additionalKeywords.join('; ')}.`);
-  }
-
   lines.push('');
   lines.push(`${globalStyle.aesthetic}.`);
   lines.push(`Location: ${facts.city} — ${facts.title}.`);
@@ -335,8 +351,55 @@ async function generateClip(
         throw err;
       }
     }
+  } else if (scene.shot_type === 'b_roll') {
+    // b_roll → reference-to-video with 1–2 venue photos.
+    // Passing both as proper @ImageN references gives the model two complementary
+    // angles to synthesize from, producing richer footage than a single input.
+    const venueUrls = scene.photo_reference_indices
+      .map((idx) => facts.photos[idx]?.url)
+      .filter((u): u is string => Boolean(u));
+
+    if (venueUrls.length === 0) {
+      throw new Error(`Scene ${scene.scene_id}: no venue photos available for b_roll`);
+    }
+
+    const prompt = buildBrollPrompt(scene, globalStyle, facts, venueUrls);
+
+    console.log(
+      `[fal] Scene ${scene.scene_id} (b_roll) → reference-to-video | ${venueUrls.length} image(s) | ${scene.duration_sec}s`,
+    );
+
+    try {
+      result = await fal.subscribe(ENDPOINT_REFERENCE, {
+        input: {
+          prompt,
+          image_urls: venueUrls,
+          resolution: '720p',
+          duration: String(scene.duration_sec),
+          aspect_ratio: '9:16',
+          generate_audio: false,
+          bitrate_mode: 'standard',
+          end_user_id: 'mintads-headout',
+        },
+        logs: true,
+        onQueueUpdate: (update) => {
+          if (update.status === 'IN_PROGRESS') {
+            process.stdout.write(`\r[fal] Scene ${scene.scene_id} (b_roll): in progress...`);
+          }
+        },
+      }) as typeof result;
+    } catch (err) {
+      if (is403(err)) {
+        console.warn(
+          `[fal] Scene ${scene.scene_id}: reference-to-video 403, falling back to image-to-video`,
+        );
+        return generateImageToVideoFallback(scene, globalStyle, facts, localPath, adId);
+      }
+      throw err;
+    }
   } else {
-    // b_roll | pov | experience_detail → image-to-video, cinematic, no creator
+    // pov | experience_detail → image-to-video, single venue photo.
+    // Single strong reference; no multi-angle benefit for these shot types.
     const primaryIdx = scene.photo_reference_indices[0] ?? 0;
     const imageUrl = facts.photos[primaryIdx]?.url ?? facts.photos[0]?.url;
 
@@ -344,7 +407,7 @@ async function generateClip(
       throw new Error(`Scene ${scene.scene_id}: no venue photo available`);
     }
 
-    const prompt = buildCinematicPrompt(scene, globalStyle, facts, primaryIdx);
+    const prompt = buildSingleShotPrompt(scene, globalStyle, facts, primaryIdx);
 
     console.log(
       `[fal] Scene ${scene.scene_id} (${scene.shot_type}) → image-to-video | 1 image | ${scene.duration_sec}s`,
@@ -427,7 +490,7 @@ async function generateImageToVideoFallback(
       scene.visual_direction,
     ].join('\n');
   } else {
-    prompt = buildCinematicPrompt(scene, globalStyle, facts, primaryIdx);
+    prompt = buildSingleShotPrompt(scene, globalStyle, facts, primaryIdx);
   }
 
   const result = await fal.subscribe(ENDPOINT_IMAGE, {
@@ -543,7 +606,7 @@ export async function generateVideoClips(
         shot_type: scene.shot_type,
         lip_sync: scene.lip_sync,
         duration_sec: scene.duration_sec,
-        endpoint: scene.shot_type === 'ugc_creator' ? 'reference-to-video' : 'image-to-video',
+        endpoint: (scene.shot_type === 'ugc_creator' || scene.shot_type === 'b_roll') ? 'reference-to-video' : 'image-to-video',
       });
       const t = Date.now();
 
