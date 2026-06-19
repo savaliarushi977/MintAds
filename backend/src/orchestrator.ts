@@ -115,7 +115,7 @@ async function runPipelineAsync(
     // 2. Resolve angle + hook descriptions from DB
     const [angleRow, hookRow] = await Promise.all([
       db.query(
-        'SELECT id, name, description, example_line FROM angles WHERE id = $1',
+        'SELECT id, name, description, example_line, sub_format, journey, brand_lean FROM angles WHERE id = $1',
         [userInput.angle],
       ),
       db.query(

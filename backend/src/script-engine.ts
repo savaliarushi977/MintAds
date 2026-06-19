@@ -277,12 +277,15 @@ function buildUserMessage(
   hookDef: HookDef,
 ): string {
   const personaDescriptions: Record<string, string> = {
-    solo: 'Solo Traveller — personal discovery, "I" language, independent explorer energy',
-    couple: 'Couple — shared romantic moments, "we" language, adventurous or intimate',
-    art_enthusiast: 'Art Enthusiast — aesthetic depth, artistic appreciation, visual beauty',
-    cultural: 'Cultural Traveller — historical significance, authentic local perspective',
-    family: 'Family — safety, ease, kid-friendly framing, value for money',
-    budget: 'Budget Traveller — smart spending, value framing, cost-per-memory',
+    // v2 personas
+    history_geeks:      'History Geeks — depth, the real story, "stand where it happened". Values accuracy and insider detail. Use "I" language with reverence.',
+    art_culture_lovers: 'Art & Culture Lovers — beauty, the masterpiece moment, meaning. Aesthetic depth and artistic appreciation. Evocative, sensory language.',
+    first_timers:       'First-Timers — see the must-dos, don\'t mess it up, de-risk. Practical tone, crowd-sourced confidence. Reassuring and clear.',
+    couples:            'Couples — a shared moment, romance, the photo. Emotion-led, "we" language, aspirational and intimate.',
+    solo_travellers:    'Solo Travellers — discovery, freedom, the story to tell. Social currency and personal narrative. "I" language, adventurous.',
+    families:           'Families — everyone happy, no stress, value, safety. Practical framing, kid-friendly. Reassuring and inclusive.',
+    luxe_lovers:        'Luxe Lovers — exclusivity, status, the best, seamless. Identity signaling and self-enhancement. Elevated, confident tone.',
+    thrill_seekers:     'Thrill Seekers — adrenaline, novelty, "I actually did that". Emotion + social currency. High energy, bold language.',
   };
 
   const journeyDescriptions: Record<string, string> = {
@@ -305,6 +308,7 @@ function buildUserMessage(
     `- Brand Mode: ${brandDescriptions[userInput.brand] ?? userInput.brand}`,
     `- Angle: ${angleDef.id} — ${angleDef.name}: ${angleDef.description}`,
     ...(angleDef.example_line ? [`  Example line: "${angleDef.example_line}"`] : []),
+    ...(angleDef.sub_format ? [`  UGC sub-format (auto-selected for this angle): ${angleDef.sub_format} — let this shape the overall creative structure and pacing.`] : []),
     `- Hook: ${hookDef.id} — ${hookDef.name}: ${hookDef.description}`,
     `  Hook template: "${hookDef.template}"`,
     `- Video Format: ${userInput.video_format}`,
