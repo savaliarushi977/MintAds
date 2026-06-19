@@ -161,7 +161,14 @@ export function Output() {
         <div className={styles.playerCol}>
           <div className={styles.stage}>
             {activeVideo ? (
-              <video className={styles.video} src={activeVideo.url} controls playsInline preload="metadata" />
+              <video
+                className={styles.video}
+                src={activeVideo.url}
+                controls
+                playsInline
+                preload="metadata"
+                aria-label={`Generated ad video, ${activeVideo.format}`}
+              />
             ) : (
               <p className="t-para-md" style={{ color: 'var(--text-white)' }}>
                 No video rendered.

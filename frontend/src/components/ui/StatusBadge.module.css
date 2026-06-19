@@ -30,7 +30,8 @@
 }
 .success {
   background: var(--surface-success);
-  color: var(--text-positive);
+  /* -800 (not --text-positive/-700) for AA contrast on the pale-green chip at 12px */
+  color: var(--color-okaygreen-800);
 }
 .warning {
   background: var(--surface-warning);
@@ -38,5 +39,6 @@
 }
 .danger {
   background: var(--surface-error);
-  color: var(--text-destructive);
+  /* -700 for AA contrast on the pale-red chip at 12px */
+  color: var(--color-warningred-700);
 }
