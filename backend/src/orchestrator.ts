@@ -36,7 +36,7 @@ function generateRunAdId(userInput: UserInput): string {
 }
 
 // ---------------------------------------------------------------------------
-// Status helper
+// Helpers
 // ---------------------------------------------------------------------------
 
 async function updateRunStatus(runId: number, status: string, stage?: string): Promise<void> {
@@ -44,6 +44,17 @@ async function updateRunStatus(runId: number, status: string, stage?: string): P
     `UPDATE runs SET status = $1, current_stage = COALESCE($2, current_stage) WHERE id = $3`,
     [status, stage ?? null, runId],
   );
+}
+
+async function checkBudget(runId: number, adId: string): Promise<void> {
+  const res = await db.query(
+    'SELECT total_cost_usd FROM runs WHERE id = $1',
+    [runId],
+  );
+  const cost = parseFloat(res.rows[0]?.total_cost_usd ?? '0');
+  if (cost > 10) {
+    console.warn(`[pipeline] Budget warning: ${adId} has spent $${cost.toFixed(2)} (target < $10)`);
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -152,6 +163,9 @@ async function runPipelineAsync(
 
     const allClips = [...nonLipSyncClips, ...lipSyncClips].sort((a, b) => a.scene_id - b.scene_id);
 
+    // Budget check after video generation (most expensive stage)
+    await checkBudget(runId, adId);
+
     // 5. Assembly
     await updateRunStatus(runId, 'assembling', 'assembly');
     const assembly = await assembleAd(allClips, voSegments, script, userInput, runId, adId);
@@ -201,8 +215,7 @@ async function exportAndFinalize(
   for (const file of assembly.files) {
     await db.query(
       `INSERT INTO assets (run_id, ad_id, asset_type, format, file_path, file_size, duration_sec)
-       VALUES ($1, $2, 'final_video', $3, $4, $5, $6)
-       ON CONFLICT DO NOTHING`,
+       VALUES ($1, $2, 'final_video', $3, $4, $5, $6)`,
       [runId, adId, file.format, file.file_path, file.file_size, file.duration_sec],
     );
   }
