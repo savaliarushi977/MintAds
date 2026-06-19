@@ -139,7 +139,10 @@ For "ugc_creator" scenes, NEVER select photos that are:
   ✗ Photos whose keyword or alt text contains words like: "aerial", "panoramic from top",
     "overhead", "bird's eye", "from above", "drone", "bird eye", "view from", "roman forum and palatine hill" (that specific photo is aerial)
 
-For "b_roll" and "pov" scenes: aerial, wide, and overhead shots are fine and often preferred.
+For "b_roll", "pov", and "experience_detail" scenes: ground-level, eye-level, and atmospheric shots are preferred.
+Aerial, overhead, and drone photos are excluded for ALL shot types — Seedance produces unnatural camera motion
+when given an aerial reference and the result looks AI-generated. If no good ground-level photo is available,
+pick the closest alternative and describe the desired angle in the prompt instead.
 
 ═══════════════════════════════════════════
 GLOBAL STYLE
@@ -172,15 +175,18 @@ background_music_volume:
 ═══════════════════════════════════════════
 CLAIM TRACING (mandatory)
 ═══════════════════════════════════════════
-- Every price, rating, review count, duration, or named feature on screen or in VO must come from facts.json
-- Add EVERY factual claim to claim_sources as: "claim text as it appears" → "facts.field.path"
+- Every price, rating, review count, duration, or percentage on screen or in VO must come from facts.json
+- Add to claim_sources ONLY numeric or measurable values: prices (€19.90), ratings (4.4★), review counts (26,773+), durations (90 min), percentages
+- Do NOT add qualitative phrases ("skip the line", "walked straight in", "worth every cent") — those are creative copy, not traceable numeric claims
 - claim_sources values must be ONLY the bare path — no annotations, no quotes, no extra text
-  CORRECT: "€25.35" → "facts.price.display"
-  CORRECT: "timed entry" → "facts.inclusions[0]"
-  WRONG:   "timed entry" → "facts.inclusions[0] — 'Timed entry to the Colosseum'"
+  CORRECT: "€19.90" → "facts.price.display"
+  CORRECT: "4.4★" → "facts.rating"
+  CORRECT: "26,773+" → "facts.review_count"
+  WRONG:   "skip the line" → "facts.has_skip_the_line"   ← qualitative phrase, not a number
+  WRONG:   "timed entry" → "facts.inclusions[0]"          ← qualitative phrase, not a number
 - Config-derived values (e.g. typical queue times) use: "known {value} (config)"
 - Do NOT invent numbers. Do NOT round. Use exact values from facts.json.
-- claim_sources MUST be non-empty.
+- claim_sources MUST be non-empty — include at least the price and rating.
 
 VO SEGMENTS:
 - Write vo_segments for beats hook, body, payoff ONLY — NOT cta
@@ -534,6 +540,12 @@ function extractFactsPath(sourceField: string): string | null {
   return m ? m[1] : null;
 }
 
+// Numeric/measurable claim: contains a digit (prices, ratings, counts, durations, %).
+// Qualitative phrases (no digits) are creative copy — only verify the path exists, not the value.
+function looksNumeric(claimText: string): boolean {
+  return /\d/.test(claimText);
+}
+
 function validateClaimCompleteness(script: ScriptJson, facts: FactsJson): string[] {
   const v: string[] = [];
 
@@ -552,7 +564,8 @@ function validateClaimCompleteness(script: ScriptJson, facts: FactsJson): string
       continue;
     }
 
-    if (!claimMatchesValue(claimText, value)) {
+    // Only enforce value-match for numeric claims; qualitative phrases just need a valid path
+    if (looksNumeric(claimText) && !claimMatchesValue(claimText, value)) {
       v.push(
         `Claim "${claimText}" references "${cleanPath}" (facts value: "${String(value)}") — values don't match`,
       );
@@ -765,7 +778,7 @@ export async function generateScript(
   let totalOutputTokens: number;
 
   try {
-    const resp1 = await callClaude(systemPrompt, userMessage);
+    const resp1 = await callClaude(systemPrompt, userMessage, 4096);
     totalInputTokens = resp1.input_tokens;
     totalOutputTokens = resp1.output_tokens;
     const cost1 = computeCostUsd(resp1.input_tokens, resp1.output_tokens);
@@ -794,7 +807,7 @@ export async function generateScript(
     const t2 = Date.now();
 
     try {
-      const resp2 = await callClaude(systemPrompt, retryMessage);
+      const resp2 = await callClaude(systemPrompt, retryMessage, 4096);
       totalInputTokens += resp2.input_tokens;
       totalOutputTokens += resp2.output_tokens;
       const cost2 = computeCostUsd(resp2.input_tokens, resp2.output_tokens);
