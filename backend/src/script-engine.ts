@@ -47,7 +47,7 @@ TONE: First-person creator voice. Casual, authentic, energetic — like a real t
 SCENE STRUCTURE
 ═══════════════════════════════════════════
 You decide the number of content scenes (4 or 5) based on what the experience needs.
-Every ad ends with exactly one "cta" scene (end card — Remotion-rendered, NOT a Higgsfield call).
+Every ad ends with exactly one "cta" scene (end card — Remotion-rendered, NOT a fal.ai call).
 
 Beat types and their constraints:
   "hook"    (4–6s)  — Scroll-stopping opener. EXACTLY ONE. Always scene_id 1.
@@ -67,23 +67,45 @@ Duration rules:
 ═══════════════════════════════════════════
 SHOT TYPES — assign one per scene
 ═══════════════════════════════════════════
-  "ugc_creator"       — Creator is on camera, talking or reacting to the camera. High energy.
+  "ugc_creator"       — Creator is on camera. Two sub-modes controlled by "lip_sync" (see below).
   "b_roll"            — Cinematic experience footage. No creator visible. Venue, crowd, views, atmosphere.
   "pov"               — First-person perspective — what the creator sees. Shaky handheld. Creator's hands may appear.
   "experience_detail" — Close-up on one compelling detail: artwork, food, a ticket, a stunning vista close-up.
 
 Assignment guidance:
-  • Hook: strongly prefer "ugc_creator" — creator talking directly to camera grabs attention
+  • Hook: strongly prefer "ugc_creator" with lip_sync: true — creator talking directly to camera grabs attention
   • Body scenes: NEVER use the same shot_type twice in a row. Mix b_roll, pov, experience_detail freely.
-    One body scene CAN be "ugc_creator" if the experience naturally calls for a creator reaction moment.
-  • Payoff: prefer "ugc_creator" (creator's genuine reaction) or "b_roll" (cinematic reveal)
+    One body scene CAN be "ugc_creator" (with lip_sync: false) for a natural creator reaction moment.
+  • Payoff: prefer "ugc_creator" with lip_sync: true (creator closing to camera) or "b_roll" (cinematic reveal)
   • CTA: shot_type is irrelevant (Remotion end card) — set to "experience_detail" as a placeholder
 
 Visual direction for each shot_type:
-  "ugc_creator"       → Describe: what creator says/does on camera, their energy, gesture, frame composition
-  "b_roll"            → Describe: what is being shown, camera movement (slow push, tracking, wide establishing), mood
-  "pov"               → Describe: what the camera (as creator's eyes) sees, movement, what is revealed
-  "experience_detail" → Describe: the specific detail, how it's framed (macro, tilt-up, reveal), lighting
+  "ugc_creator" (lip_sync: true)  → Creator speaks directly to camera. Describe: what they say, energy, gesture, framing. Mouth moves with VO.
+  "ugc_creator" (lip_sync: false) → Creator visible but NOT speaking. Describe: natural reactions — awe, walking, looking around.
+                                    Reactions must read as a real human having a genuine moment: a brief smile, a slow turn to take in the view,
+                                    a quiet nod. NOT theatrical — no sustained exaggerated expressions, no frozen poses, no single emotion
+                                    held for the entire clip. Direct the scene so the creator's body language evolves naturally over its duration.
+  "b_roll"                        → Describe: what is being shown, camera movement (slow push, tracking, wide establishing), mood
+  "pov"                           → Describe: what the camera (as creator's eyes) sees, movement, what is revealed
+  "experience_detail"             → Describe: the specific detail, how it's framed (macro, tilt-up, reveal), lighting
+
+═══════════════════════════════════════════
+LIP SYNC — the lip_sync field
+═══════════════════════════════════════════
+Every scene MUST include "lip_sync": true or false.
+
+Rules:
+  lip_sync: true  — ONLY for shot_type "ugc_creator" scenes where the creator speaks directly to camera.
+                    The audio engine will pass the VO segment audio to fal.ai so Seedance can drive
+                    the creator's mouth movements. Visual direction MUST describe the creator talking.
+  lip_sync: false — ALL other cases:
+                    • shot_type is b_roll, pov, or experience_detail (no creator speaking)
+                    • shot_type is ugc_creator but creator is reacting, walking, or looking around (not talking)
+                    • cta scene (always false)
+
+You decide when lip_sync is true. A ugc_creator scene where the creator is gesturing at a view
+with no dialogue = lip_sync: false. A ugc_creator scene where the creator opens with "Okay so I just
+got here and..." = lip_sync: true.
 
 ═══════════════════════════════════════════
 PHOTO REFERENCES — photo_reference_indices
@@ -141,8 +163,8 @@ aesthetic:
 background_music_volume:
   Array of floats (0.0–1.0), one value per non-cta scene IN SCENE ORDER.
   Length MUST equal the number of non-cta scenes (4 or 5).
-  fal.ai generates silent video clips. Remotion layers background music over all clips and uses these
-  values to control music volume per scene, ducking it under the ElevenLabs VO track.
+  fal.ai generates silent clips (generate_audio: false for non-lip-sync scenes). Remotion layers background music
+  over all clips and uses these values to control music volume per scene, ducking it under the ElevenLabs VO track.
   Rule of thumb: 0.15–0.25 for scenes with heavy VO (hook, body), 0.30–0.45 for payoff where music can breathe.
   Example for 4 content scenes: [0.2, 0.15, 0.2, 0.4]
   Example for 5 content scenes: [0.2, 0.15, 0.2, 0.2, 0.4]
@@ -163,6 +185,11 @@ CLAIM TRACING (mandatory)
 VO SEGMENTS:
 - Write vo_segments for beats hook, body, payoff ONLY — NOT cta
 - Sum of vo_segment target_duration_sec: 26–36s (covers all non-cta scenes)
+- pause_after_sec: optional float — the natural pause after this segment before the next begins.
+  Use 0.2–0.4s at beat boundaries (hook→body, body→payoff). Omit or set null for the last segment.
+  The audio engine converts this to an SSML <break> tag for ElevenLabs.
+- delivery_style: one sentence describing the voice energy and delivery across the whole ad.
+  Example: "UGC creator — conversational, slight breathiness, natural pauses between thoughts."
 
 ═══════════════════════════════════════════
 OUTPUT SCHEMA — output this exact structure
@@ -181,7 +208,7 @@ OUTPUT SCHEMA — output this exact structure
   "video_script": {
     "global_style": {
       "creator_description": "specific creator description — age, presentation, exact clothing, accessories, energy",
-      "aesthetic": "shared visual style sentence prepended to every Higgsfield prompt",
+      "aesthetic": "shared visual style sentence prepended to every fal.ai scene prompt",
       "background_music_volume": [0.2, 0.15, 0.2, 0.4]
     },
     "scenes": [
@@ -189,6 +216,7 @@ OUTPUT SCHEMA — output this exact structure
         "scene_id": 1,
         "beat": "hook",
         "shot_type": "ugc_creator",
+        "lip_sync": true,
         "duration_sec": 5,
         "visual_direction": "Detailed scene direction for fal.ai I2V. Describe subject, action, camera movement, framing. UGC handheld style.",
         "text_overlay": "string or null",
@@ -198,6 +226,7 @@ OUTPUT SCHEMA — output this exact structure
         "scene_id": 2,
         "beat": "body",
         "shot_type": "b_roll",
+        "lip_sync": false,
         "duration_sec": 9,
         "visual_direction": "...",
         "text_overlay": null,
@@ -213,10 +242,12 @@ OUTPUT SCHEMA — output this exact structure
         "beat": "hook",
         "vo_text": "Actual spoken VO text",
         "target_duration_sec": 5,
-        "pacing": "fast, punchy"
+        "pacing": "fast, punchy",
+        "pause_after_sec": 0.3
       }
     ],
     "tone": "energetic, conversational, UGC creator voice",
+    "delivery_style": "UGC creator — conversational, not radio-announcer. Slight breathiness. Natural mid-sentence pauses.",
     "total_duration_target_sec": 31
   },
   "end_card": {
@@ -372,6 +403,15 @@ function validateStructural(script: ScriptJson, facts: FactsJson): string[] {
     if (!sc.shot_type || !VALID_SHOT_TYPES.has(sc.shot_type))
       v.push(`Scene ${sc.scene_id} has invalid shot_type "${sc.shot_type}" — must be ugc_creator | b_roll | pov | experience_detail`);
 
+    // lip_sync validation
+    if (typeof sc.lip_sync !== 'boolean') {
+      v.push(`Scene ${sc.scene_id} is missing lip_sync (must be true or false)`);
+    } else if (sc.lip_sync === true && sc.beat === 'cta') {
+      v.push(`Scene ${sc.scene_id} (cta): lip_sync must be false — the CTA is a Remotion end card, not a fal.ai clip`);
+    } else if (sc.lip_sync === true && sc.shot_type !== 'ugc_creator') {
+      v.push(`Scene ${sc.scene_id} has lip_sync: true but shot_type is "${sc.shot_type}" — lip_sync can only be true for ugc_creator scenes`);
+    }
+
     // photo_reference_indices must be an array
     if (!Array.isArray(sc.photo_reference_indices)) {
       v.push(`Scene ${sc.scene_id}: photo_reference_indices must be an array`);
@@ -424,10 +464,28 @@ function validateStructural(script: ScriptJson, facts: FactsJson): string[] {
         v.push(`vo_segment references scene_id ${seg.scene_id} which has no matching non-cta scene`);
     }
 
+    // Every lip_sync: true scene must have a matching vo_segment (audio engine needs it for fal.ai)
+    const voSceneIds = new Set(segs.map(seg => seg.scene_id));
+    for (const sc of nonCtaScenes) {
+      if (sc.lip_sync === true && !voSceneIds.has(sc.scene_id))
+        v.push(`Scene ${sc.scene_id} has lip_sync: true but no matching vo_segment — fal.ai has no audio to drive mouth movement`);
+    }
+
     const totalVo = segs.reduce((s, seg) => s + (seg.target_duration_sec ?? 0), 0);
     if (totalVo < 26 || totalVo > 36)
       v.push(`Total VO duration ${totalVo}s is outside the 26–36s range`);
+
+    // pause_after_sec must be a positive number if provided
+    for (const seg of segs) {
+      if (seg.pause_after_sec !== undefined && seg.pause_after_sec !== null) {
+        if (typeof seg.pause_after_sec !== 'number' || seg.pause_after_sec <= 0 || seg.pause_after_sec > 2)
+          v.push(`vo_segment scene ${seg.scene_id}: pause_after_sec must be a positive number ≤ 2`);
+      }
+    }
   }
+
+  if (!script.audio_script?.delivery_style || script.audio_script.delivery_style.trim().length < 15)
+    v.push('audio_script.delivery_style is missing or too vague (min 15 chars)');
 
   // End card
   const ec = script.end_card;
