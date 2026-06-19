@@ -252,8 +252,13 @@ async function generateClip(
   facts: FactsJson,
   creatorPhotoUrl: string | null,
   adId: string,
-  voSegmentPath?: string, // provided only for lip_sync: true scenes
+  voSegmentPath?: string,  // local MP3 path — provided for lip_sync: true scenes
+  voDurationSec?: number,  // actual ElevenLabs output duration — drives clip length for all scenes
 ): Promise<VideoClipResult> {
+  // Audio is the master clock. Use the actual VO duration (ceil'd to the nearest
+  // integer second fal.ai accepts) instead of Claude's target. This guarantees
+  // the clip is always exactly as long as the audio, eliminating overlap in Remotion.
+  const clipDurationSec = voDurationSec ? Math.ceil(voDurationSec) : scene.duration_sec;
   const localPath = path.join(
     DATA_RUNS_DIR,
     adId,
@@ -281,7 +286,7 @@ async function generateClip(
       const prompt = buildLipSyncCreatorPrompt(scene, globalStyle, facts, imageUrls, hasCreator);
 
       console.log(
-        `[fal] Scene ${scene.scene_id} (ugc_creator, lip_sync) → reference-to-video | ${imageUrls.length} image(s) + audio | ${scene.duration_sec}s`,
+        `[fal] Scene ${scene.scene_id} (ugc_creator, lip_sync) → reference-to-video | ${imageUrls.length} image(s) + audio | ${clipDurationSec}s (vo: ${voDurationSec?.toFixed(2)}s)`,
       );
 
       try {
@@ -291,7 +296,7 @@ async function generateClip(
             image_urls: imageUrls,
             audio_urls: [audioUrl],
             resolution: '720p',
-            duration: String(scene.duration_sec),
+            duration: String(clipDurationSec),
             aspect_ratio: '9:16',
             generate_audio: true, // Seedance needs this to drive lip-sync; embedded audio muted at assembly
             bitrate_mode: 'standard',
@@ -310,7 +315,7 @@ async function generateClip(
           console.warn(
             `[fal] Scene ${scene.scene_id}: reference-to-video 403, falling back to image-to-video`,
           );
-          return generateImageToVideoFallback(scene, globalStyle, facts, localPath, adId);
+          return generateImageToVideoFallback(scene, globalStyle, facts, localPath, adId, clipDurationSec);
         }
         throw err;
       }
@@ -319,7 +324,7 @@ async function generateClip(
       const prompt = buildReactionCreatorPrompt(scene, globalStyle, facts, imageUrls, hasCreator);
 
       console.log(
-        `[fal] Scene ${scene.scene_id} (ugc_creator, reaction) → reference-to-video | ${imageUrls.length} image(s) | ${scene.duration_sec}s`,
+        `[fal] Scene ${scene.scene_id} (ugc_creator, reaction) → reference-to-video | ${imageUrls.length} image(s) | ${clipDurationSec}s`,
       );
 
       try {
@@ -328,7 +333,7 @@ async function generateClip(
             prompt,
             image_urls: imageUrls,
             resolution: '720p',
-            duration: String(scene.duration_sec),
+            duration: String(clipDurationSec),
             aspect_ratio: '9:16',
             generate_audio: false,
             bitrate_mode: 'standard',
@@ -346,7 +351,7 @@ async function generateClip(
           console.warn(
             `[fal] Scene ${scene.scene_id}: reference-to-video 403, falling back to image-to-video`,
           );
-          return generateImageToVideoFallback(scene, globalStyle, facts, localPath, adId);
+          return generateImageToVideoFallback(scene, globalStyle, facts, localPath, adId, clipDurationSec);
         }
         throw err;
       }
@@ -366,7 +371,7 @@ async function generateClip(
     const prompt = buildBrollPrompt(scene, globalStyle, facts, venueUrls);
 
     console.log(
-      `[fal] Scene ${scene.scene_id} (b_roll) → reference-to-video | ${venueUrls.length} image(s) | ${scene.duration_sec}s`,
+      `[fal] Scene ${scene.scene_id} (b_roll) → reference-to-video | ${venueUrls.length} image(s) | ${clipDurationSec}s`,
     );
 
     try {
@@ -393,7 +398,7 @@ async function generateClip(
         console.warn(
           `[fal] Scene ${scene.scene_id}: reference-to-video 403, falling back to image-to-video`,
         );
-        return generateImageToVideoFallback(scene, globalStyle, facts, localPath, adId);
+        return generateImageToVideoFallback(scene, globalStyle, facts, localPath, adId, clipDurationSec);
       }
       throw err;
     }
@@ -410,7 +415,7 @@ async function generateClip(
     const prompt = buildSingleShotPrompt(scene, globalStyle, facts, primaryIdx);
 
     console.log(
-      `[fal] Scene ${scene.scene_id} (${scene.shot_type}) → image-to-video | 1 image | ${scene.duration_sec}s`,
+      `[fal] Scene ${scene.scene_id} (${scene.shot_type}) → image-to-video | 1 image | ${clipDurationSec}s`,
     );
 
     result = await fal.subscribe(ENDPOINT_IMAGE, {
@@ -451,7 +456,7 @@ async function generateClip(
     shot_type: scene.shot_type,
     file_path: localPath,
     remote_url: videoUrl,
-    duration_sec: scene.duration_sec,
+    duration_sec: clipDurationSec, // ceil'd VO duration — Remotion frame offsets use this
   };
 }
 
@@ -467,6 +472,7 @@ async function generateImageToVideoFallback(
   facts: FactsJson,
   localPath: string,
   adId: string,
+  clipDurationSec: number, // passed from parent so it inherits the VO-derived duration
 ): Promise<VideoClipResult> {
   const primaryIdx = scene.photo_reference_indices[0] ?? 0;
   const imageUrl = facts.photos[primaryIdx]?.url ?? facts.photos[0]?.url;
@@ -498,7 +504,7 @@ async function generateImageToVideoFallback(
       prompt,
       image_url: imageUrl,
       resolution: '720p',
-      duration: String(scene.duration_sec),
+      duration: String(clipDurationSec),
       aspect_ratio: '9:16',
       generate_audio: false,
       bitrate_mode: 'standard',
@@ -517,7 +523,7 @@ async function generateImageToVideoFallback(
     shot_type: scene.shot_type,
     file_path: localPath,
     remote_url: result.data.video.url,
-    duration_sec: scene.duration_sec,
+    duration_sec: clipDurationSec,
   };
 }
 
@@ -610,7 +616,10 @@ export async function generateVideoClips(
       });
       const t = Date.now();
 
-      const voSegmentPath = scene.lip_sync ? voMap.get(scene.scene_id)?.file_path : undefined;
+      const voSegment = voMap.get(scene.scene_id);
+      const voSegmentPath = scene.lip_sync ? voSegment?.file_path : undefined;
+      // Pass actual VO duration to ALL scenes — audio is master clock regardless of shot type
+      const voDurationSec = voSegment?.duration_sec;
 
       const attempt = async () =>
         generateClip(
@@ -620,11 +629,12 @@ export async function generateVideoClips(
           creatorPhotoUrl,
           adId,
           voSegmentPath,
+          voDurationSec,
         );
 
       try {
         const clip = await attempt();
-        const cost = scene.duration_sec * COST_PER_SEC;
+        const cost = clip.duration_sec * COST_PER_SEC;
         await closeStageLog(logId, Date.now() - t, cost, {
           file_path: clip.file_path,
           remote_url: clip.remote_url,
@@ -637,7 +647,7 @@ export async function generateVideoClips(
         );
         try {
           const clip = await attempt();
-          const cost = scene.duration_sec * COST_PER_SEC;
+          const cost = clip.duration_sec * COST_PER_SEC;
           await closeStageLog(logId, Date.now() - t, cost, {
             file_path: clip.file_path,
             remote_url: clip.remote_url,

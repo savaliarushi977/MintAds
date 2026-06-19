@@ -4,6 +4,7 @@ dotenv.config({ path: path.resolve(__dirname, '../../.env') });
 import express from 'express';
 import cors from 'cors';
 import fs from 'fs';
+import { initRemotionBundle } from './services/remotion-client';
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -31,4 +32,8 @@ app.get('/api/health', (_req, res) => {
 
 app.listen(PORT, () => {
   console.log(`MintAds backend running on http://localhost:${PORT}`);
+  // Bundle Remotion after server is up — takes ~30–60s, non-blocking
+  initRemotionBundle().catch(err => {
+    console.error('[remotion] Bundle failed — assembly will be unavailable:', err.message);
+  });
 });
