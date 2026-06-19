@@ -5,6 +5,7 @@ import { AdComposition, AdProps } from './AdComposition';
 export function RemotionRoot() {
   const defaultProps: AdProps = {
     clips: [],
+    voSegments: [],
     bgMusicSrc: '',
     bgMusicVolume: 0.12,
     textOverlays: [],

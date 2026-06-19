@@ -162,3 +162,14 @@ export interface HookDef {
   template: string;
   description: string;
 }
+
+export interface OutputFile {
+  format: string;       // '9:16', '1:1', '16:9'
+  file_path: string;    // absolute local path
+  file_size: number;    // bytes
+  duration_sec: number;
+}
+
+export interface AssemblyResult {
+  files: OutputFile[];
+}

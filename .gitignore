@@ -36,3 +36,6 @@ coverage/
 # Replit
 .replit
 replit.nix
+
+# Claude Code internal tooling
+.claude/agent-memory/
