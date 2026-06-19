@@ -1,0 +1,86 @@
+.shell {
+  min-height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+.header {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  background: var(--surface-white);
+  box-shadow: var(--shadow-1);
+}
+
+.headerInner {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 0 var(--space-24);
+  height: 64px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-16);
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: var(--space-12);
+}
+
+.logo {
+  height: 26px;
+  width: auto;
+  display: block;
+}
+
+.brandLabel {
+  padding-left: var(--space-12);
+  border-left: 1px solid var(--divider-dark);
+  color: var(--text-grey-3);
+}
+
+.nav {
+  display: flex;
+  align-items: center;
+  gap: var(--space-8);
+}
+
+.navLink {
+  padding: var(--space-8) var(--space-12);
+  border-radius: var(--radius-8);
+  color: var(--text-grey-3);
+  transition: background 160ms var(--ease-functional-standard),
+    color 160ms var(--ease-functional-standard);
+}
+
+.navLink:hover {
+  background: var(--surface-grey-2);
+  color: var(--text-grey-1);
+}
+
+.navLinkActive {
+  background: var(--surface-primary-1);
+  color: var(--text-primary);
+}
+
+.main {
+  flex: 1;
+  width: 100%;
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: var(--space-32) var(--space-24) var(--space-64);
+}
+
+@media (max-width: 600px) {
+  .headerInner {
+    padding: 0 var(--space-16);
+  }
+  .brandLabel {
+    display: none;
+  }
+  .main {
+    padding: var(--space-24) var(--space-16) var(--space-48);
+  }
+}
