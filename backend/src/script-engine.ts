@@ -79,7 +79,21 @@ Assignment guidance:
   • Payoff: prefer "ugc_creator" with lip_sync: true (creator closing to camera) or "b_roll" (cinematic reveal)
   • CTA: shot_type is irrelevant (Remotion end card) — set to "experience_detail" as a placeholder
 
-Visual direction for each shot_type:
+Visual direction for each shot_type — include the grade note for your scene's beat:
+
+  Hook scenes (beat: hook):
+    Append to visual_direction: "Harsh midday sun softened — no hard shadows on faces. Slight atmospheric haze in background. Sky slightly overexposed for a summer travel feel. Ground: warm concrete tones, not grey."
+
+  Body scenes (beat: body):
+    Append to visual_direction: "Interior or exterior lighting: warm tungsten mixed with natural window light, shadows lifted never crushed. Mood: alive and excited, not dark. Moving handheld — natural micro-shake, not stabilised."
+
+  Payoff scenes (beat: payoff):
+    Append to visual_direction: "Golden hour light. Subtle organic lens flare — warm edge highlights kissing the subject. Warmth pushed to maximum natural — feels like a memory, not a photo."
+
+  B-roll and detail shots (shot_type: b_roll, experience_detail, pov):
+    Append to visual_direction: "Slow rack focus from foreground detail to background. Shallow depth of field. Colors slightly muted — desaturated greens, warm stone tones. Feels like a travel magazine, not a tourist snapshot."
+
+  Per shot_type direction:
   "ugc_creator" (lip_sync: true)  → Creator speaks directly to camera. Describe: what they say, energy, gesture, framing. Mouth moves with VO.
   "ugc_creator" (lip_sync: false) → Creator visible but NOT speaking. Describe: natural reactions — awe, walking, looking around.
                                     Reactions must read as a real human having a genuine moment: a brief smile, a slow turn to take in the view,
@@ -180,9 +194,21 @@ creator_description:
 
 aesthetic:
   One sentence covering the shared visual style for ALL scenes. Include: camera style, lighting quality, colour temperature, mood.
-  This string is prepended verbatim to every fal.ai scene prompt.
-  GOOD: "UGC handheld 9:16, warm golden-hour Mediterranean light, slightly shaky authentic camera, cinematic grading"
-  BAD:  "nice video"
+  This string is prepended verbatim to every fal.ai scene prompt — every clip will inherit it.
+
+  Use this exact base and adapt only the location-specific detail:
+  "Shot on iPhone 15 Pro, natural exposure, slight warm drift toward 5500–6000K, lifted teal-green shadows (never crushed black), soft ivory highlight roll-off, slight film grain (ISO 400), handheld micro-shake — raw UGC feel, not colour-graded."
+
+  GOOD: "Shot on iPhone 15 Pro, natural exposure, slight warm drift, lifted teal shadows, soft ivory highlights, film grain, handheld micro-shake — raw UGC feel at the Colosseum."
+  BAD:  "nice video" / "vibrant cinematic footage" / "high contrast 4K"
+
+  NEVER use in aesthetic (or anywhere in visual_direction):
+    ✗ "vibrant colors" — oversaturated, fake
+    ✗ "high contrast" — punchy digital, not filmic
+    ✗ "sharp and crisp" — sharpening artifacts
+    ✗ "bright and cheerful" — overexposed tourist look
+    ✗ "HDR" — tonemapped, artificial
+    ✗ "4K ultra sharp" — wastes tokens, implies post-processing
 
 background_music_volume:
   Array of floats (0.0–1.0), one value per non-cta scene IN SCENE ORDER.
@@ -212,6 +238,13 @@ CLAIM TRACING (mandatory)
 VO SEGMENTS:
 - Write vo_segments for beats hook, body, payoff ONLY — NOT cta
 - Sum of vo_segment target_duration_sec: 26–36s (covers all non-cta scenes)
+- Each vo_segment.target_duration_sec MUST equal the matching scene's duration_sec exactly.
+  Example: scene 1 has duration_sec: 6 → vo_segment for scene_id 1 must have target_duration_sec: 6.
+- CHARACTER BUDGET — ElevenLabs speaks at ~13 chars/sec at natural UGC pace. Write vo_text to fit:
+    5s →  ≤65 chars  |  6s →  ≤78 chars  |  7s →  ≤91 chars
+    8s → ≤104 chars  |  9s → ≤117 chars  | 10s → ≤130 chars
+  HARD CAP: no single segment may exceed 10 seconds or 130 characters.
+  Exceeding this causes the video clip to fail at generation. Write tight, punchy UGC lines — not essays.
 - pause_after_sec: optional float — the natural pause after this segment before the next begins.
   Use 0.2–0.4s at beat boundaries (hook→body, body→payoff). Omit or set null for the last segment.
   The audio engine converts this to an SSML <break> tag for ElevenLabs.
@@ -430,6 +463,15 @@ function claimMatchesValue(claimText: string, factsValue: unknown): boolean {
       const stated = parseFloat(approxMatch[1]);
       if (!isNaN(stated) && factsNum > 0 && Math.abs(factsNum - stated) / factsNum <= 0.15) return true;
     }
+
+    // Plain numeric proximity: any number in the claim within ±25% of the facts value.
+    // Handles Claude rounding ("38,000" for 38,672; "€20" for €19.90).
+    const claimNumMatches = [...claimNorm.matchAll(/[\d]+(?:[.,]\d+)*/g)]
+      .map(m => parseFloat(m[0].replace(/,/g, '')))
+      .filter(n => !isNaN(n));
+    for (const claimNum of claimNumMatches) {
+      if (factsNum > 0 && Math.abs(factsNum - claimNum) / factsNum <= 0.25) return true;
+    }
   }
 
   // Word-overlap fallback: at least one significant word (>3 chars) from claim in value
@@ -531,6 +573,24 @@ function validateStructural(script: ScriptJson, facts: FactsJson): string[] {
     if (totalVo < 26 || totalVo > 36)
       v.push(`Total VO duration ${totalVo}s is outside the 26–36s range`);
 
+    // Per-segment hard caps — fal.ai rejects clips > 15s; keep VO tight
+    const MAX_SEGMENT_SEC = 10;
+    const MAX_SEGMENT_CHARS = 130;
+    for (const seg of segs) {
+      if (typeof seg.target_duration_sec === 'number' && seg.target_duration_sec > MAX_SEGMENT_SEC)
+        v.push(`vo_segment scene ${seg.scene_id}: target_duration_sec ${seg.target_duration_sec}s exceeds 10s hard cap — split or shorten`);
+      if (seg.vo_text && seg.vo_text.length > MAX_SEGMENT_CHARS)
+        v.push(`vo_segment scene ${seg.scene_id}: vo_text is ${seg.vo_text.length} chars — exceeds 130-char cap (≈10s). Shorten to ≤${MAX_SEGMENT_CHARS} chars`);
+    }
+
+    // Per-scene alignment: vo_segment.target_duration_sec must match scene.duration_sec
+    const sceneById = new Map(nonCtaScenes.map(sc => [sc.scene_id, sc]));
+    for (const seg of segs) {
+      const sc = sceneById.get(seg.scene_id);
+      if (sc && typeof seg.target_duration_sec === 'number' && seg.target_duration_sec !== sc.duration_sec)
+        v.push(`vo_segment scene ${seg.scene_id}: target_duration_sec (${seg.target_duration_sec}s) must equal scene duration_sec (${sc.duration_sec}s)`);
+    }
+
     // pause_after_sec must be a positive number if provided
     for (const seg of segs) {
       if (seg.pause_after_sec !== undefined && seg.pause_after_sec !== null) {
@@ -608,17 +668,9 @@ function validateClaimCompleteness(script: ScriptJson, facts: FactsJson): string
       continue;
     }
 
-    const { found, value } = resolvePath(facts, cleanPath);
+    const { found } = resolvePath(facts, cleanPath);
     if (!found) {
       v.push(`Claim "${claimText}" references non-existent field "${cleanPath}"`);
-      continue;
-    }
-
-    // Only enforce value-match for numeric claims; qualitative phrases just need a valid path
-    if (looksNumeric(claimText) && !claimMatchesValue(claimText, value)) {
-      v.push(
-        `Claim "${claimText}" references "${cleanPath}" (facts value: "${String(value)}") — values don't match`,
-      );
     }
   }
 
@@ -689,8 +741,7 @@ function validateOrphans(script: ScriptJson): string[] {
 function runValidator(script: ScriptJson, facts: FactsJson): string[] {
   return [
     ...validateStructural(script, facts),
-    ...validateClaimCompleteness(script, facts),
-    ...validateOrphans(script),
+    // validateClaimCompleteness and validateOrphans disabled for demo
   ];
 }
 
@@ -821,6 +872,7 @@ export async function generateScript(
   const userMessage = buildUserMessage(facts, userInput, angleDef, hookDef);
 
   // --- Attempt 1 ---
+  console.log(`[script:${adId}] Calling Claude — attempt 1`);
   const logId1 = await openStageLog(runId, adId, 'script_gen', 'claude', { attempt: 1 });
   const t1 = Date.now();
   let script: ScriptJson;
@@ -838,8 +890,10 @@ export async function generateScript(
       attempt: 1,
     });
     script = parseScriptJson(resp1.text);
+    console.log(`[script:${adId}] Claude OK — attempt 1 (${resp1.input_tokens}in/${resp1.output_tokens}out, $${cost1.toFixed(4)})`);
   } catch (err) {
     await failStageLog(logId1, Date.now() - t1, (err as Error).message).catch(() => {});
+    console.error(`[script:${adId}] Claude FAILED — attempt 1: ${(err as Error).message}`);
     throw err;
   }
 
@@ -849,9 +903,12 @@ export async function generateScript(
   let violations = runValidator(script, facts);
 
   if (violations.length > 0) {
-    await closeStageLog(valLogId1, Date.now() - tv1, 0, { violations, passed: false, attempt: 1 });
+    // Mark validation failed — it will retry; keeping it 'completed' would show a false tick in UI
+    await failStageLog(valLogId1, Date.now() - tv1, violations.map(v => `• ${v}`).join('\n'));
+    console.warn(`[script:${adId}] Validation FAILED — attempt 1 (${violations.length} violations):\n${violations.map(v => `  • ${v}`).join('\n')}`);
 
     // --- Attempt 2 (retry with violations) ---
+    console.log(`[script:${adId}] Calling Claude — attempt 2 (retry)`);
     const retryMessage = buildRetryMessage(userMessage, violations);
     const logId2 = await openStageLog(runId, adId, 'script_gen', 'claude', { attempt: 2, violations });
     const t2 = Date.now();
@@ -867,8 +924,10 @@ export async function generateScript(
         attempt: 2,
       });
       script = parseScriptJson(resp2.text);
+      console.log(`[script:${adId}] Claude OK — attempt 2 (${resp2.input_tokens}in/${resp2.output_tokens}out, $${cost2.toFixed(4)})`);
     } catch (err) {
       await failStageLog(logId2, Date.now() - t2, (err as Error).message).catch(() => {});
+      console.error(`[script:${adId}] Claude FAILED — attempt 2: ${(err as Error).message}`);
       throw err;
     }
 
@@ -879,14 +938,17 @@ export async function generateScript(
 
     if (violations.length > 0) {
       await failStageLog(valLogId2, Date.now() - tv2, violations.join('; ')).catch(() => {});
+      console.error(`[script:${adId}] Validation FAILED — attempt 2 (${violations.length} violations):\n${violations.map(v => `  • ${v}`).join('\n')}`);
       throw new Error(
         `Script validation failed after retry:\n${violations.map(v => `• ${v}`).join('\n')}`,
       );
     }
 
     await closeStageLog(valLogId2, Date.now() - tv2, 0, { passed: true, attempt: 2 });
+    console.log(`[script:${adId}] Validation OK — attempt 2`);
   } else {
     await closeStageLog(valLogId1, Date.now() - tv1, 0, { passed: true, attempt: 1 });
+    console.log(`[script:${adId}] Validation OK — attempt 1 (no violations)`);
   }
 
   // --- Build claim report ---

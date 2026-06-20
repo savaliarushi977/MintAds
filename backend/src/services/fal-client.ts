@@ -46,6 +46,26 @@ async function uploadAudioToFal(localPath: string): Promise<string> {
 }
 
 // ---------------------------------------------------------------------------
+// Cinematic grade suffixes — appended per beat to reinforce the color/lighting
+// brief without relying on Claude to write it into every visual_direction.
+// ---------------------------------------------------------------------------
+
+function beatGrade(beat: string, shotType: string): string {
+  if (beat === 'hook') {
+    return 'Harsh midday sun softened — no hard shadows on faces. Slight atmospheric haze in background. Sky slightly overexposed for a summer travel feel. Ground: warm concrete tones, not grey.';
+  }
+  if (beat === 'payoff') {
+    return 'Golden hour light. Subtle organic lens flare — warm edge highlights kissing the subject. Warmth pushed to maximum natural — feels like a memory, not a photo.';
+  }
+  // body / any non-lip-sync shot or b-roll/pov/experience_detail
+  if (shotType === 'b_roll' || shotType === 'pov' || shotType === 'experience_detail') {
+    return 'Slow rack focus from foreground detail to background. Shallow depth of field. Colors slightly muted — desaturated greens, warm stone tones. Feels like a travel magazine, not a tourist snapshot.';
+  }
+  // body ugc_creator
+  return 'Warm tungsten mixed with natural window light, shadows lifted never crushed. Mood: alive and excited, not dark. Moving handheld — natural micro-shake, not stabilised.';
+}
+
+// ---------------------------------------------------------------------------
 // Prompt builders — one per routing path
 // ---------------------------------------------------------------------------
 
@@ -93,6 +113,7 @@ function buildLipSyncCreatorPrompt(
   );
   lines.push('---');
   lines.push(scene.visual_direction);
+  lines.push(beatGrade(scene.beat, scene.shot_type));
   return lines.join('\n');
 }
 
@@ -142,6 +163,7 @@ function buildReactionCreatorPrompt(
   );
   lines.push('---');
   lines.push(scene.visual_direction);
+  lines.push(beatGrade(scene.beat, scene.shot_type));
   return lines.join('\n');
 }
 
@@ -173,6 +195,7 @@ function buildBrollPrompt(
   );
   lines.push('---');
   lines.push(scene.visual_direction);
+  lines.push(beatGrade(scene.beat, scene.shot_type));
   return lines.join('\n');
 }
 
@@ -200,6 +223,7 @@ function buildSingleShotPrompt(
   );
   lines.push('---');
   lines.push(scene.visual_direction);
+  lines.push(beatGrade(scene.beat, scene.shot_type));
   return lines.join('\n');
 }
 
@@ -258,7 +282,8 @@ async function generateClip(
   // Audio is the master clock. Use the actual VO duration (ceil'd to the nearest
   // integer second fal.ai accepts) instead of Claude's target. This guarantees
   // the clip is always exactly as long as the audio, eliminating overlap in Remotion.
-  const clipDurationSec = voDurationSec ? Math.ceil(voDurationSec) : scene.duration_sec;
+  // fal.ai hard cap is 15s. Clamp so an overlong VO never causes Unprocessable Entity.
+  const clipDurationSec = voDurationSec ? Math.min(Math.ceil(voDurationSec), 15) : scene.duration_sec;
   const localPath = path.join(
     DATA_RUNS_DIR,
     adId,
@@ -380,7 +405,7 @@ async function generateClip(
           prompt,
           image_urls: venueUrls,
           resolution: '720p',
-          duration: String(scene.duration_sec),
+          duration: String(clipDurationSec),
           aspect_ratio: '9:16',
           generate_audio: false,
           bitrate_mode: 'standard',
@@ -423,7 +448,7 @@ async function generateClip(
         prompt,
         image_url: imageUrl,
         resolution: '720p',
-        duration: String(scene.duration_sec),
+        duration: String(clipDurationSec),
         aspect_ratio: '9:16',
         generate_audio: false,
         bitrate_mode: 'standard',
