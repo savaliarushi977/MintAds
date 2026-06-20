@@ -3,7 +3,9 @@
   align-items: center;
   gap: var(--space-6);
   padding: var(--space-4) var(--space-10);
-  border-radius: var(--radius-50p);
+  /* Stadium pill — a fixed large radius clamps to half the height. 50% would
+     make a wide badge render as an ellipse, not a pill. */
+  border-radius: 999px;
   font-family: var(--font-text);
   font-weight: var(--fw-regular);
   font-size: var(--fs-12);

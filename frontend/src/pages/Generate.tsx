@@ -1,6 +1,15 @@
 import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Button, Select, TextInput, TextArea, Icon, Skeleton, ErrorState } from '../components/ui';
+import {
+  Button,
+  Select,
+  TextInput,
+  TextArea,
+  Icon,
+  Skeleton,
+  ErrorState,
+  type SelectOption,
+} from '../components/ui';
 import { useGenerateConfig } from '../hooks/useGenerateConfig';
 import { partitionByRecommendation, type Partitioned } from '../lib/recommend';
 import { api, ApiError } from '../lib/api';
@@ -31,29 +40,33 @@ const INITIAL: FormState = {
 
 const REQUIRED: (keyof FormState)[] = ['experience_id', 'persona', 'angle', 'hook'];
 
-function GroupedOptions<T extends { id: string }>({
-  parts,
-  labelFor,
-}: {
-  parts: Partitioned<T>;
-  labelFor: (item: T) => string;
-}) {
-  const opt = (item: T) => (
-    <option key={item.id} value={item.id}>
-      {labelFor(item)}
-    </option>
-  );
+const JOURNEY_OPTIONS: SelectOption[] = [
+  { value: 'pre_trip', label: 'Pre-trip' },
+  { value: 'in_trip', label: 'In-trip' },
+];
+const BRAND_OPTIONS: SelectOption[] = [
+  { value: 'headout', label: 'Headout' },
+  { value: 'non_headout', label: 'Non-Headout' },
+];
+const FORMAT_OPTIONS: SelectOption[] = [
+  { value: '9:16', label: '9:16 — vertical' },
+  { value: '1:1', label: '1:1 — square' },
+  { value: '16:9', label: '16:9 — landscape' },
+  { value: 'all', label: 'All formats' },
+];
+
+/** Flatten a recommendation partition into grouped Select options. */
+function toOptions<T extends { id: string }>(
+  parts: Partitioned<T>,
+  labelFor: (item: T) => string,
+): SelectOption[] {
   const grouped = parts.recommended.length > 0 || parts.works.length > 0;
-  if (!grouped) return <>{parts.rest.map(opt)}</>;
-  return (
-    <>
-      {parts.recommended.length > 0 && (
-        <optgroup label="Recommended">{parts.recommended.map(opt)}</optgroup>
-      )}
-      {parts.works.length > 0 && <optgroup label="Works well">{parts.works.map(opt)}</optgroup>}
-      {parts.rest.length > 0 && <optgroup label="Other">{parts.rest.map(opt)}</optgroup>}
-    </>
-  );
+  if (!grouped) return parts.rest.map((t) => ({ value: t.id, label: labelFor(t) }));
+  return [
+    ...parts.recommended.map((t) => ({ value: t.id, label: labelFor(t), group: 'Recommended' })),
+    ...parts.works.map((t) => ({ value: t.id, label: labelFor(t), group: 'Works well' })),
+    ...parts.rest.map((t) => ({ value: t.id, label: labelFor(t), group: 'Other' })),
+  ];
 }
 
 export function Generate() {
@@ -70,13 +83,24 @@ export function Generate() {
     setErrors((e) => ({ ...e, [key]: undefined }));
   };
 
-  const angleParts = useMemo(
+  const personaOptions = useMemo<SelectOption[]>(
+    () => (config?.personas ?? []).map((p) => ({ value: p.id, label: p.name })),
+    [config],
+  );
+  const angleOptions = useMemo<SelectOption[]>(
     () =>
-      partitionByRecommendation(config?.angles ?? [], config?.personaAngleMap[form.persona]),
+      toOptions(
+        partitionByRecommendation(config?.angles ?? [], config?.personaAngleMap[form.persona]),
+        (a) => `${a.id} · ${a.name}`,
+      ),
     [config, form.persona],
   );
-  const hookParts = useMemo(
-    () => partitionByRecommendation(config?.hooks ?? [], config?.angleHookMap[form.angle]),
+  const hookOptions = useMemo<SelectOption[]>(
+    () =>
+      toOptions(
+        partitionByRecommendation(config?.hooks ?? [], config?.angleHookMap[form.angle]),
+        (h) => h.name,
+      ),
     [config, form.angle],
   );
 
@@ -104,9 +128,11 @@ export function Generate() {
     setSubmitting(true);
     try {
       const { ad_id } = await api.generate(payload);
-      navigate(`/progress/${encodeURIComponent(ad_id)}`);
+      navigate(`/progress/${encodeURIComponent(ad_id)}`, { state: { payload } });
     } catch (err) {
-      setSubmitError(err instanceof ApiError ? err.message : 'Could not start generation. Please try again.');
+      setSubmitError(
+        err instanceof ApiError ? err.message : 'Could not start generation. Please try again.',
+      );
       setSubmitting(false);
     }
   };
@@ -158,77 +184,56 @@ export function Generate() {
         <Select
           label="Persona"
           required
+          placeholder="Select a persona"
+          options={personaOptions}
           value={form.persona}
           error={errors.persona}
-          onChange={(e) => set('persona', e.target.value)}
-        >
-          <option value="" disabled>
-            Select a persona
-          </option>
-          {config.personas.map((p) => (
-            <option key={p.id} value={p.id}>
-              {p.name}
-            </option>
-          ))}
-        </Select>
+          onChange={(v) => set('persona', v)}
+        />
 
         <div className={styles.row}>
           <Select
             label="Journey type"
+            options={JOURNEY_OPTIONS}
             value={form.journey_type}
-            onChange={(e) => set('journey_type', e.target.value as JourneyType)}
-          >
-            <option value="pre_trip">Pre-trip</option>
-            <option value="in_trip">In-trip</option>
-          </Select>
+            onChange={(v) => set('journey_type', v as JourneyType)}
+          />
           <Select
             label="Brand"
+            options={BRAND_OPTIONS}
             value={form.brand}
-            onChange={(e) => set('brand', e.target.value as Brand)}
-          >
-            <option value="headout">Headout</option>
-            <option value="non_headout">Non-Headout</option>
-          </Select>
+            onChange={(v) => set('brand', v as Brand)}
+          />
         </div>
 
         <Select
           label="Angle"
           required
+          placeholder="Select an angle"
+          options={angleOptions}
           value={form.angle}
           error={errors.angle}
           hint={form.persona ? 'Sorted for the selected persona.' : undefined}
-          onChange={(e) => set('angle', e.target.value)}
-        >
-          <option value="" disabled>
-            Select an angle
-          </option>
-          <GroupedOptions parts={angleParts} labelFor={(a) => `${a.id} · ${a.name}`} />
-        </Select>
+          onChange={(v) => set('angle', v)}
+        />
 
         <Select
           label="Hook"
           required
+          placeholder="Select a hook"
+          options={hookOptions}
           value={form.hook}
           error={errors.hook}
           hint={form.angle ? 'Sorted for the selected angle.' : undefined}
-          onChange={(e) => set('hook', e.target.value)}
-        >
-          <option value="" disabled>
-            Select a hook
-          </option>
-          <GroupedOptions parts={hookParts} labelFor={(h) => h.name} />
-        </Select>
+          onChange={(v) => set('hook', v)}
+        />
 
         <Select
           label="Video format"
+          options={FORMAT_OPTIONS}
           value={form.video_format}
-          onChange={(e) => set('video_format', e.target.value as VideoFormat)}
-        >
-          <option value="9:16">9:16 — vertical</option>
-          <option value="1:1">1:1 — square</option>
-          <option value="16:9">16:9 — landscape</option>
-          <option value="all">All formats</option>
-        </Select>
+          onChange={(v) => set('video_format', v as VideoFormat)}
+        />
 
         <TextArea
           label="Additional details"

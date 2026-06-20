@@ -23,6 +23,32 @@
   flex-direction: column;
 }
 
+.colHeaders {
+  display: flex;
+  align-items: center;
+  gap: var(--space-12);
+  padding: var(--space-10) 0 var(--space-8);
+  border-bottom: 1px solid var(--divider-light);
+  color: var(--text-grey-3);
+}
+
+.colHeaderSpacer {
+  flex: none;
+  width: 22px;
+}
+
+.colHeaderMeta {
+  display: flex;
+  align-items: center;
+  gap: var(--space-16);
+  font-size: var(--fs-12);
+}
+
+.colHeaderCost {
+  min-width: 56px;
+  text-align: right;
+}
+
 .row {
   display: flex;
   align-items: center;

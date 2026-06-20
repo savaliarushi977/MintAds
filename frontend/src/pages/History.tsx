@@ -45,17 +45,7 @@ export function History() {
       <div className={styles.header}>
         <h1 className="t-display-sm">History</h1>
         <div className={styles.filter}>
-          <Select
-            label="Filter by status"
-            value={filter}
-            onChange={(e) => setFilter(e.target.value)}
-          >
-            {FILTERS.map((f) => (
-              <option key={f.value || 'all'} value={f.value}>
-                {f.label}
-              </option>
-            ))}
-          </Select>
+          <Select label="Filter by status" value={filter} options={FILTERS} onChange={setFilter} />
         </div>
       </div>
 

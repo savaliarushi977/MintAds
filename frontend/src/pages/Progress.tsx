@@ -1,5 +1,5 @@
-import { useCallback, useEffect } from 'react';
-import { useNavigate, useParams, Link } from 'react-router-dom';
+import { useCallback, useEffect, useState } from 'react';
+import { useNavigate, useParams, useLocation, Link } from 'react-router-dom';
 import {
   Button,
   Card,
@@ -13,7 +13,7 @@ import { usePolling } from '../hooks/usePolling';
 import { api, ApiError } from '../lib/api';
 import { buildTracker, type TrackerChild, type TrackerItem } from '../lib/tracker';
 import { formatCost, formatDurationMs } from '../lib/format';
-import type { StageLog, StageStatus, StatusResponse } from '../lib/types';
+import type { GenerateInput, StageLog, StageStatus, StatusResponse } from '../lib/types';
 import styles from './Progress.module.css';
 
 const ICON_CLASS: Record<StageStatus, string> = {
@@ -101,6 +101,14 @@ function Tracker({ status }: { status: StatusResponse }) {
   const items = buildTracker(status.stages);
   return (
     <div className={styles.rows}>
+      <div className={styles.colHeaders}>
+        <span className={styles.colHeaderSpacer} />
+        <span style={{ flex: 1 }} className="t-para-sm">Stage</span>
+        <span className={styles.colHeaderMeta}>
+          <span>Duration</span>
+          <span className={styles.colHeaderCost}>Cost</span>
+        </span>
+      </div>
       {items.map((item) =>
         item.kind === 'single' ? (
           <SingleRow key={item.key} item={item} />
@@ -115,6 +123,20 @@ function Tracker({ status }: { status: StatusResponse }) {
 export function Progress() {
   const { adId } = useParams();
   const navigate = useNavigate();
+  const location = useLocation();
+  const retryPayload = (location.state as { payload?: GenerateInput } | null)?.payload;
+  const [retrying, setRetrying] = useState(false);
+
+  const handleRetry = async () => {
+    if (!retryPayload) return;
+    setRetrying(true);
+    try {
+      const { ad_id } = await api.generate(retryPayload);
+      navigate(`/progress/${encodeURIComponent(ad_id)}`, { state: { payload: retryPayload } });
+    } catch {
+      setRetrying(false);
+    }
+  };
 
   const fetcher = useCallback(() => api.getStatus(adId as string), [adId]);
   const { data, error } = usePolling(fetcher, {
@@ -170,9 +192,14 @@ export function Progress() {
           title="Generation failed"
           message={data.error_message ?? 'The pipeline stopped before finishing.'}
           action={
-            <Link to="/">
-              <Button>Start over</Button>
-            </Link>
+            <div style={{ display: 'flex', gap: 'var(--space-8)', alignItems: 'center' }}>
+              {retryPayload && (
+                <Button variant="tertiary" size="sm" onClick={handleRetry} disabled={retrying}>
+                  {retrying ? 'Retrying…' : 'Retry'}
+                </Button>
+              )}
+              <Link to="/"><Button>Start over</Button></Link>
+            </div>
           }
         />
       </div>

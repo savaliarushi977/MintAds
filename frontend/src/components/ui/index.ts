@@ -1,7 +1,9 @@
 export { Button } from './Button';
 export type { ButtonProps, ButtonVariant, ButtonSize } from './Button';
-export { Select, TextInput, TextArea } from './form';
-export type { SelectProps, TextInputProps, TextAreaProps } from './form';
+export { TextInput, TextArea } from './form';
+export type { TextInputProps, TextAreaProps } from './form';
+export { Select } from './Select';
+export type { SelectProps, SelectOption } from './Select';
 export { Card, CardHeader } from './Card';
 export { Tag } from './Tag';
 export type { TagTone } from './Tag';

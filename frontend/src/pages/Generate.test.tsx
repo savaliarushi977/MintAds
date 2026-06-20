@@ -59,9 +59,16 @@ describe('Generate page', () => {
     await screen.findByLabelText(/experience id/i);
 
     await userEvent.type(screen.getByLabelText(/experience id/i), '7148');
-    await userEvent.selectOptions(screen.getByLabelText(/persona/i), 'solo');
-    await userEvent.selectOptions(screen.getByLabelText(/angle/i), 'A3');
-    await userEvent.selectOptions(screen.getByLabelText(/hook/i), 'problem');
+
+    await userEvent.click(screen.getByRole('combobox', { name: /persona/i }));
+    await userEvent.click(screen.getByRole('option', { name: 'Solo Traveller' }));
+
+    await userEvent.click(screen.getByRole('combobox', { name: /angle/i }));
+    await userEvent.click(screen.getByRole('option', { name: 'A3 · Skip-the-Line' }));
+
+    await userEvent.click(screen.getByRole('combobox', { name: /hook/i }));
+    await userEvent.click(screen.getByRole('option', { name: 'Problem' }));
+
     await userEvent.click(screen.getByRole('button', { name: /generate ad/i }));
 
     await waitFor(() => expect(api.generate).toHaveBeenCalledTimes(1));
