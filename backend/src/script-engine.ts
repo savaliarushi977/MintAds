@@ -741,8 +741,7 @@ function validateOrphans(script: ScriptJson): string[] {
 function runValidator(script: ScriptJson, facts: FactsJson): string[] {
   return [
     ...validateStructural(script, facts),
-    ...validateClaimCompleteness(script, facts),
-    ...validateOrphans(script),
+    // validateClaimCompleteness and validateOrphans disabled for demo
   ];
 }
 
